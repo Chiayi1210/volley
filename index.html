@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>排球技術統計平台</title>
+    <title>專業排球技術統計平台</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -19,24 +20,70 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
         h1 {
             text-align: center;
             color: white;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             font-size: 2.5em;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
-        .control-panel {
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.9);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            background: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transform: translateY(-2px);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
             background: white;
             border-radius: 15px;
             padding: 25px;
             margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
         }
 
         .input-group {
@@ -64,9 +111,9 @@
             border-color: #667eea;
         }
 
-        .button-group {
+        .action-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 10px;
             margin-top: 20px;
         }
@@ -75,31 +122,11 @@
             padding: 12px 20px;
             border: none;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s;
             color: white;
-        }
-
-        .btn-score {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        }
-
-        .btn-lose {
-            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
-        }
-
-        .btn-error {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        }
-
-        .btn-add {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-        }
-
-        .btn-reset {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
         }
 
         button:hover {
@@ -107,73 +134,21 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
 
-        button:active {
-            transform: translateY(0);
-        }
-
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .stats-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-
-        .stats-card h2 {
-            color: #667eea;
-            margin-bottom: 15px;
-            border-bottom: 3px solid #667eea;
-            padding-bottom: 10px;
-        }
-
-        .stat-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #eee;
-        }
-
-        .stat-item:last-child {
-            border-bottom: none;
-        }
-
-        .stat-label {
-            font-weight: bold;
-            color: #555;
-        }
-
-        .stat-value {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .player-list {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-
-        .player-list h2 {
-            color: #667eea;
-            margin-bottom: 15px;
-        }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .btn-danger { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); }
+        .btn-warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .btn-info { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
 
         table {
             width: 100%;
             border-collapse: collapse;
+            margin-top: 15px;
         }
 
         th, td {
             padding: 12px;
-            text-align: left;
+            text-align: center;
             border-bottom: 1px solid #eee;
         }
 
@@ -187,174 +162,379 @@
             background: #f5f5f5;
         }
 
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-weight: bold;
+            color: #555;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 20px 0;
+        }
+
+        .mvp-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 1.5em;
+            margin: 20px 0;
+        }
+
+        .skill-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .skill-btn {
+            padding: 15px;
+            font-size: 14px;
+        }
+
+        .match-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .match-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
         .delete-btn {
             background: #e74c3c;
-            color: white;
-            border: none;
             padding: 5px 10px;
-            border-radius: 5px;
-            cursor: pointer;
             font-size: 12px;
         }
 
-        .delete-btn:hover {
-            background: #c0392b;
-        }
-
         @media (max-width: 768px) {
-            h1 {
-                font-size: 1.8em;
-            }
-            
-            .button-group {
+            .form-grid, .action-grid {
                 grid-template-columns: 1fr;
             }
-            
-            table {
-                font-size: 14px;
-            }
-            
-            th, td {
-                padding: 8px;
+            .chart-container {
+                height: 300px;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🏐 排球技術統計平台</h1>
+        <h1>🏐 專業排球技術統計平台</h1>
 
-        <div class="control-panel">
-            <div class="input-group">
-                <label>選擇球員</label>
-                <select id="playerSelect">
-                    <option value="">-- 請先新增球員 --</option>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('match')">比賽設定</button>
+            <button class="tab-btn" onclick="switchTab('record')">技術記錄</button>
+            <button class="tab-btn" onclick="switchTab('stats')">數據統計</button>
+            <button class="tab-btn" onclick="switchTab('analysis')">數據分析</button>
+            <button class="tab-btn" onclick="switchTab('history')">歷史紀錄</button>
+        </div>
+
+        <!-- 比賽設定 -->
+        <div id="tab-match" class="tab-content active">
+            <div class="card">
+                <h2>比賽資訊設定</h2>
+                <div class="form-grid">
+                    <div class="input-group">
+                        <label>比賽日期</label>
+                        <input type="date" id="matchDate">
+                    </div>
+                    <div class="input-group">
+                        <label>比賽地點</label>
+                        <input type="text" id="matchLocation" placeholder="輸入比賽地點">
+                    </div>
+                    <div class="input-group">
+                        <label>對手隊伍</label>
+                        <input type="text" id="opponentTeam" placeholder="輸入對手隊名">
+                    </div>
+                    <div class="input-group">
+                        <label>當前局數</label>
+                        <select id="currentSet">
+                            <option value="1">第一局</option>
+                            <option value="2">第二局</option>
+                            <option value="3">第三局</option>
+                            <option value="4">第四局</option>
+                            <option value="5">第五局</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="startMatch()">開始新比賽</button>
+            </div>
+
+            <div class="card">
+                <h2>球員管理</h2>
+                <div class="input-group">
+                    <label>新增球員</label>
+                    <input type="text" id="playerName" placeholder="輸入球員姓名或背號">
+                </div>
+                <button class="btn-success" onclick="addPlayer()">➕ 新增球員</button>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>球員</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="playerListTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 技術記錄 -->
+        <div id="tab-record" class="tab-content">
+            <div class="card">
+                <h2>選擇球員</h2>
+                <select id="recordPlayerSelect">
+                    <option value="">-- 請選擇球員 --</option>
                 </select>
             </div>
 
-            <div class="button-group">
-                <button class="btn-score" onclick="recordStat('score')">✓ 得分</button>
-                <button class="btn-lose" onclick="recordStat('lose')">✗ 失分</button>
-                <button class="btn-error" onclick="recordStat('error')">⚠ 個人失誤</button>
-            </div>
-
-            <hr style="margin: 20px 0; border: none; border-top: 2px solid #eee;">
-
-            <div class="input-group">
-                <label>新增球員</label>
-                <input type="text" id="playerName" placeholder="輸入球員姓名">
-            </div>
-            <div class="button-group">
-                <button class="btn-add" onclick="addPlayer()">➕ 新增球員</button>
-                <button class="btn-reset" onclick="resetAll()">🔄 重置所有數據</button>
-            </div>
-        </div>
-
-        <div class="stats-container">
-            <div class="stats-card">
-                <h2>隊伍統計</h2>
-                <div class="stat-item">
-                    <span class="stat-label">總得分</span>
-                    <span class="stat-value" id="totalScore">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">總失分</span>
-                    <span class="stat-value" id="totalLose">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">總失誤</span>
-                    <span class="stat-value" id="totalError">0</span>
-                </div>
-            </div>
-
-            <div class="stats-card">
-                <h2>當前球員統計</h2>
-                <div class="stat-item">
-                    <span class="stat-label">球員</span>
-                    <span class="stat-value" id="currentPlayer">未選擇</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">得分</span>
-                    <span class="stat-value" id="currentScore">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">失分</span>
-                    <span class="stat-value" id="currentLose">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">失誤</span>
-                    <span class="stat-value" id="currentError">0</span>
+            <div class="card">
+                <h2>技術動作記錄</h2>
+                <div class="skill-buttons">
+                    <button class="btn-success skill-btn" onclick="recordAction('serve', 'score')">🎾 發球得分</button>
+                    <button class="btn-danger skill-btn" onclick="recordAction('serve', 'error')">🎾 發球失誤</button>
+                    
+                    <button class="btn-success skill-btn" onclick="recordAction('receive', 'score')">📥 接發得分</button>
+                    <button class="btn-danger skill-btn" onclick="recordAction('receive', 'error')">📥 接發失誤</button>
+                    
+                    <button class="btn-success skill-btn" onclick="recordAction('attack', 'score')">⚡ 攻擊成功</button>
+                    <button class="btn-danger skill-btn" onclick="recordAction('attack', 'error')">⚡ 攻擊失誤</button>
+                    
+                    <button class="btn-success skill-btn" onclick="recordAction('block', 'score')">🛡️ 攔網得分</button>
+                    <button class="btn-danger skill-btn" onclick="recordAction('block', 'error')">🛡️ 攔網失誤</button>
+                    
+                    <button class="btn-success skill-btn" onclick="recordAction('set', 'score')">🤲 舉球得分</button>
+                    <button class="btn-danger skill-btn" onclick="recordAction('set', 'error')">🤲 舉球失誤</button>
+                    
+                    <button class="btn-success skill-btn" onclick="recordAction('defense', 'score')">🛟 防守成功</button>
+                    <button class="btn-danger skill-btn" onclick="recordAction('defense', 'error')">🛟 防守失誤</button>
                 </div>
             </div>
         </div>
 
-        <div class="player-list">
-            <h2>球員詳細統計</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>球員</th>
-                        <th>得分</th>
-                        <th>失分</th>
-                        <th>失誤</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="playerTable">
-                    <tr>
-                        <td colspan="5" style="text-align: center; color: #999;">尚無球員數據</td>
-                    </tr>
-                </tbody>
-            </table>
+        <!-- 數據統計 -->
+        <div id="tab-stats" class="tab-content">
+            <div class="card">
+                <h2>球員技術統計</h2>
+                <div style="overflow-x: auto;">
+                    <table id="statsTable">
+                        <thead>
+                            <tr>
+                                <th>球員</th>
+                                <th>發球</th>
+                                <th>接發</th>
+                                <th>攻擊</th>
+                                <th>攔網</th>
+                                <th>舉球</th>
+                                <th>防守</th>
+                                <th>總得分</th>
+                                <th>總失誤</th>
+                            </tr>
+                        </thead>
+                        <tbody id="statsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>成功率統計</h2>
+                <div id="successRateStats"></div>
+            </div>
+        </div>
+
+        <!-- 數據分析 -->
+        <div id="tab-analysis" class="tab-content">
+            <div id="mvpDisplay"></div>
+
+            <div class="card">
+                <h2>各項技術排名</h2>
+                <div id="rankingDisplay"></div>
+            </div>
+
+            <div class="card">
+                <h2>技術統計圖表</h2>
+                <div class="chart-container">
+                    <canvas id="skillChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>成功率圖表</h2>
+                <div class="chart-container">
+                    <canvas id="rateChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 歷史紀錄 -->
+        <div id="tab-history" class="tab-content">
+            <div class="card">
+                <h2>比賽歷史</h2>
+                <button class="btn-danger" onclick="clearHistory()">清除所有歷史</button>
+                <div class="match-list" id="matchHistory"></div>
+            </div>
         </div>
     </div>
 
     <script>
+        let currentMatch = null;
         let players = {};
+        let matchHistory = [];
 
-        // 頁面載入時從 localStorage 讀取數據
+        // 載入數據
         window.onload = function() {
-            const saved = localStorage.getItem('volleyballStats');
-            if (saved) {
-                players = JSON.parse(saved);
-                updatePlayerSelect();
-                updateTeamStats();
-                updatePlayerTable();
-                updateCurrentPlayerStats();
-            }
+            loadData();
+            updateAllDisplays();
+            document.getElementById('matchDate').valueAsDate = new Date();
         };
 
-        // 儲存數據到 localStorage
+        function loadData() {
+            const saved = localStorage.getItem('volleyballData');
+            if (saved) {
+                const data = JSON.parse(saved);
+                players = data.players || {};
+                matchHistory = data.matchHistory || [];
+                currentMatch = data.currentMatch || null;
+            }
+        }
+
         function saveData() {
-            localStorage.setItem('volleyballStats', JSON.stringify(players));
+            localStorage.setItem('volleyballData', JSON.stringify({
+                players: players,
+                matchHistory: matchHistory,
+                currentMatch: currentMatch
+            }));
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            event.target.classList.add('active');
+
+            if (tabName === 'stats') updateStatsTable();
+            if (tabName === 'analysis') updateAnalysis();
+            if (tabName === 'history') displayMatchHistory();
+        }
+
+        function startMatch() {
+            const date = document.getElementById('matchDate').value;
+            const location = document.getElementById('matchLocation').value;
+            const opponent = document.getElementById('opponentTeam').value;
+
+            if (!date || !location || !opponent) {
+                alert('請填寫完整的比賽資訊！');
+                return;
+            }
+
+            currentMatch = {
+                id: Date.now(),
+                date: date,
+                location: location,
+                opponent: opponent,
+                startTime: new Date().toISOString(),
+                sets: {}
+            };
+
+            saveData();
+            alert('比賽已開始！請切換到「技術記錄」頁面開始記錄。');
         }
 
         function addPlayer() {
-            const nameInput = document.getElementById('playerName');
-            const name = nameInput.value.trim();
-
+            const name = document.getElementById('playerName').value.trim();
             if (!name) {
                 alert('請輸入球員姓名！');
                 return;
             }
-
             if (players[name]) {
                 alert('此球員已存在！');
                 return;
             }
 
-            players[name] = { score: 0, lose: 0, error: 0 };
-            nameInput.value = '';
+            players[name] = {
+                serve: { score: 0, error: 0 },
+                receive: { score: 0, error: 0 },
+                attack: { score: 0, error: 0 },
+                block: { score: 0, error: 0 },
+                set: { score: 0, error: 0 },
+                defense: { score: 0, error: 0 }
+            };
+
+            document.getElementById('playerName').value = '';
             saveData();
-            updatePlayerSelect();
-            updatePlayerTable();
+            updateAllDisplays();
             alert(`球員 "${name}" 新增成功！`);
         }
 
-        function updatePlayerSelect() {
-            const select = document.getElementById('playerSelect');
-            const currentValue = select.value;
+        function deletePlayer(name) {
+            if (confirm(`確定要刪除球員 "${name}" 嗎？`)) {
+                delete players[name];
+                saveData();
+                updateAllDisplays();
+            }
+        }
+
+        function recordAction(skill, result) {
+            const playerName = document.getElementById('recordPlayerSelect').value;
+            if (!playerName) {
+                alert('請先選擇球員！');
+                return;
+            }
+
+            if (!currentMatch) {
+                alert('請先在「比賽設定」頁面開始新比賽！');
+                return;
+            }
+
+            players[playerName][skill][result]++;
             
+            const currentSet = document.getElementById('currentSet').value;
+            if (!currentMatch.sets[currentSet]) {
+                currentMatch.sets[currentSet] = [];
+            }
+            currentMatch.sets[currentSet].push({
+                player: playerName,
+                skill: skill,
+                result: result,
+                time: new Date().toISOString()
+            });
+
+            saveData();
+            updateAllDisplays();
+        }
+
+        function updateAllDisplays() {
+            updatePlayerSelect();
+            updatePlayerListTable();
+            updateStatsTable();
+        }
+
+        function updatePlayerSelect() {
+            const select = document.getElementById('recordPlayerSelect');
+            const currentValue = select.value;
             select.innerHTML = '<option value="">-- 請選擇球員 --</option>';
             
             Object.keys(players).forEach(name => {
@@ -366,104 +546,257 @@
 
             if (currentValue && players[currentValue]) {
                 select.value = currentValue;
-                updateCurrentPlayerStats();
             }
         }
 
-        function recordStat(type) {
-            const select = document.getElementById('playerSelect');
-            const playerName = select.value;
-
-            if (!playerName) {
-                alert('請先選擇球員！');
-                return;
-            }
-
-            players[playerName][type]++;
-            saveData();
-            updateCurrentPlayerStats();
-            updateTeamStats();
-            updatePlayerTable();
-        }
-
-        function updateCurrentPlayerStats() {
-            const select = document.getElementById('playerSelect');
-            const playerName = select.value;
-
-            if (!playerName) {
-                document.getElementById('currentPlayer').textContent = '未選擇';
-                document.getElementById('currentScore').textContent = '0';
-                document.getElementById('currentLose').textContent = '0';
-                document.getElementById('currentError').textContent = '0';
-                return;
-            }
-
-            const player = players[playerName];
-            document.getElementById('currentPlayer').textContent = playerName;
-            document.getElementById('currentScore').textContent = player.score;
-            document.getElementById('currentLose').textContent = player.lose;
-            document.getElementById('currentError').textContent = player.error;
-        }
-
-        function updateTeamStats() {
-            let totalScore = 0, totalLose = 0, totalError = 0;
-
-            Object.values(players).forEach(player => {
-                totalScore += player.score;
-                totalLose += player.lose;
-                totalError += player.error;
-            });
-
-            document.getElementById('totalScore').textContent = totalScore;
-            document.getElementById('totalLose').textContent = totalLose;
-            document.getElementById('totalError').textContent = totalError;
-        }
-
-        function updatePlayerTable() {
-            const tbody = document.getElementById('playerTable');
-            
-            if (Object.keys(players).length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">尚無球員數據</td></tr>';
-                return;
-            }
-
+        function updatePlayerListTable() {
+            const tbody = document.getElementById('playerListTable');
             tbody.innerHTML = '';
-            Object.entries(players).forEach(([name, stats]) => {
+
+            Object.keys(players).forEach(name => {
                 const row = tbody.insertRow();
                 row.innerHTML = `
                     <td>${name}</td>
-                    <td>${stats.score}</td>
-                    <td>${stats.lose}</td>
-                    <td>${stats.error}</td>
                     <td><button class="delete-btn" onclick="deletePlayer('${name}')">刪除</button></td>
                 `;
             });
         }
 
-        function deletePlayer(name) {
-            if (confirm(`確定要刪除球員 "${name}" 嗎？`)) {
-                delete players[name];
-                saveData();
-                updatePlayerSelect();
-                updateTeamStats();
-                updatePlayerTable();
-                updateCurrentPlayerStats();
+        function updateStatsTable() {
+            const tbody = document.getElementById('statsTableBody');
+            tbody.innerHTML = '';
+
+            Object.entries(players).forEach(([name, stats]) => {
+                const totalScore = stats.serve.score + stats.receive.score + stats.attack.score + 
+                                  stats.block.score + stats.set.score + stats.defense.score;
+                const totalError = stats.serve.error + stats.receive.error + stats.attack.error + 
+                                  stats.block.error + stats.set.error + stats.defense.error;
+
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${name}</td>
+                    <td>${stats.serve.score}/${stats.serve.error}</td>
+                    <td>${stats.receive.score}/${stats.receive.error}</td>
+                    <td>${stats.attack.score}/${stats.attack.error}</td>
+                    <td>${stats.block.score}/${stats.block.error}</td>
+                    <td>${stats.set.score}/${stats.set.error}</td>
+                    <td>${stats.defense.score}/${stats.defense.error}</td>
+                    <td style="color: #11998e; font-weight: bold;">${totalScore}</td>
+                    <td style="color: #eb3349; font-weight: bold;">${totalError}</td>
+                `;
+            });
+
+            updateSuccessRates();
+        }
+
+        function updateSuccessRates() {
+            const container = document.getElementById('successRateStats');
+            container.innerHTML = '';
+
+            Object.entries(players).forEach(([name, stats]) => {
+                const skills = ['serve', 'receive', 'attack', 'block', 'set', 'defense'];
+                const skillNames = ['發球', '接發', '攻擊', '攔網', '舉球', '防守'];
+                
+                let html = `<h3>${name}</h3>`;
+                skills.forEach((skill, idx) => {
+                    const total = stats[skill].score + stats[skill].error;
+                    const rate = total > 0 ? ((stats[skill].score / total) * 100).toFixed(1) : 0;
+                    html += `
+                        <div class="stat-row">
+                            <span class="stat-label">${skillNames[idx]}成功率</span>
+                            <span class="stat-value">${rate}%</span>
+                        </div>
+                    `;
+                });
+                container.innerHTML += `<div style="margin-bottom: 20px;">${html}</div>`;
+            });
+        }
+
+        function updateAnalysis() {
+            calculateMVP();
+            displayRankings();
+            drawCharts();
+        }
+
+        function calculateMVP() {
+            let maxScore = -1;
+            let mvp = null;
+
+            Object.entries(players).forEach(([name, stats]) => {
+                const totalScore = stats.serve.score + stats.receive.score + stats.attack.score + 
+                                  stats.block.score + stats.set.score + stats.defense.score;
+                const totalError = stats.serve.error + stats.receive.error + stats.attack.error + 
+                                  stats.block.error + stats.set.error + stats.defense.error;
+                const netScore = totalScore - (totalError * 0.5);
+
+                if (netScore > maxScore) {
+                    maxScore = netScore;
+                    mvp = name;
+                }
+            });
+
+            const mvpDisplay = document.getElementById('mvpDisplay');
+            if (mvp) {
+                mvpDisplay.innerHTML = `
+                    <div class="mvp-card">
+                        🏆 本場 MVP: ${mvp}
+                        <div style="font-size: 0.6em; margin-top: 10px;">綜合評分: ${maxScore.toFixed(1)}</div>
+                    </div>
+                `;
+            } else {
+                mvpDisplay.innerHTML = '<div class="card">尚無數據</div>';
             }
         }
 
-        function resetAll() {
-            if (confirm('確定要重置所有數據嗎？此操作無法復原！')) {
+        function displayRankings() {
+            const container = document.getElementById('rankingDisplay');
+            const skills = ['serve', 'receive', 'attack', 'block', 'set', 'defense'];
+            const skillNames = ['發球', '接發', '攻擊', '攔網', '舉球', '防守'];
+            
+            let html = '';
+            skills.forEach((skill, idx) => {
+                const ranking = Object.entries(players)
+                    .map(([name, stats]) => ({
+                        name: name,
+                        score: stats[skill].score
+                    }))
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 3);
+
+                html += `<div style="margin-bottom: 20px;">
+                    <h3>${skillNames[idx]}排行</h3>`;
+                ranking.forEach((player, i) => {
+                    html += `<div class="stat-row">
+                        <span>${i + 1}. ${player.name}</span>
+                        <span class="stat-value">${player.score}</span>
+                    </div>`;
+                });
+                html += '</div>';
+            });
+            container.innerHTML = html;
+        }
+
+        function drawCharts() {
+            drawSkillChart();
+            drawRateChart();
+        }
+
+        function drawSkillChart() {
+            const ctx = document.getElementById('skillChart');
+            if (window.skillChart) window.skillChart.destroy();
+
+            const playerNames = Object.keys(players);
+            const skills = ['發球', '接發', '攻擊', '攔網', '舉球', '防守'];
+            const skillKeys = ['serve', 'receive', 'attack', 'block', 'set', 'defense'];
+            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+
+            const datasets = skills.map((skill, idx) => ({
+                label: skill,
+                data: playerNames.map(name => players[name][skillKeys[idx]].score),
+                backgroundColor: colors[idx]
+            }));
+
+            window.skillChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: playerNames,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function drawRateChart() {
+            const ctx = document.getElementById('rateChart');
+            if (window.rateChart) window.rateChart.destroy();
+
+            const playerNames = Object.keys(players);
+            const skillKeys = ['serve', 'receive', 'attack', 'block', 'set', 'defense'];
+            
+            const avgRates = playerNames.map(name => {
+                let totalRate = 0;
+                let count = 0;
+                skillKeys.forEach(skill => {
+                    const total = players[name][skill].score + players[name][skill].error;
+                    if (total > 0) {
+                        totalRate += (players[name][skill].score / total) * 100;
+                        count++;
+                    }
+                });
+                return count > 0 ? totalRate / count : 0;
+            });
+
+            window.rateChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: playerNames,
+                    datasets: [{
+                        label: '平均成功率 (%)',
+                        data: avgRates,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    }
+                }
+            });
+        }
+
+        function displayMatchHistory() {
+            const container = document.getElementById('matchHistory');
+            if (matchHistory.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">尚無比賽紀錄</p>';
+                return;
+            }
+
+            let html = '';
+            matchHistory.forEach((match, idx) => {
+                html += `
+                    <div class="match-item">
+                        <strong>比賽 ${idx + 1}</strong><br>
+                        日期: ${match.date}<br>
+                        地點: ${match.location}<br>
+                        對手: ${match.opponent}<br>
+                        局數: ${Object.keys(match.sets).length} 局
+                        <button class="delete-btn" onclick="deleteMatch(${idx})" style="margin-left: 10px;">刪除</button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function deleteMatch(idx) {
+            if (confirm('確定要刪除此比賽紀錄嗎？')) {
+                matchHistory.splice(idx, 1);
+                saveData();
+                displayMatchHistory();
+            }
+        }
+
+        function clearHistory() {
+            if (confirm('確定要清除所有歷史紀錄嗎？此操作無法復原！')) {
+                matchHistory = [];
                 players = {};
+                currentMatch = null;
                 saveData();
-                updatePlayerSelect();
-                updateTeamStats();
-                updatePlayerTable();
-                updateCurrentPlayerStats();
-                alert('所有數據已重置！');
+                updateAllDisplays();
+                displayMatchHistory();
+                alert('所有歷史紀錄已清除！');
             }
         }
-
-        document.getElementById('playerSelect').addEventListener('change', updateCurrentPlayerStats);
     </script>
 </body>
 </html>
