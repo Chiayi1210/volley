@@ -236,6 +236,28 @@
                 height: 300px;
             }
         }
+
+        /* 非常小的螢幕（舊手機）再縮一次 */
+@media (max-width: 480px) {
+    h1 {
+        font-size: 1.8em;
+        padding: 0 10px;
+    }
+
+    .skill-buttons {
+        grid-template-columns: 1fr; /* 技術按鈕改成一欄，避免太擠 */
+    }
+
+    button,
+    .skill-btn {
+        font-size: 14px;
+        padding: 10px 14px;
+    }
+
+    .card {
+        padding: 18px;
+    }
+}
     </style>
 </head>
 <body>
