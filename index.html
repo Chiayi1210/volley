@@ -533,7 +533,7 @@
         }
 
         window.onload = function() {
-            loadData();
+            loadData();  // 保留舊的本機資料（離線用）
             document.getElementById('matchDate').valueAsDate = new Date();
             updateAllDisplays();
             updateSetFilterOptions();
@@ -547,7 +547,10 @@
                     updateCurrentMatchInfo();
                 });
             }
-        };
+
+    // ★ 新增：一載入頁面就去 Supabase 抓最新的歷史比賽
+    loadMatchHistoryFromSupabase();
+};
 
         // ===== 共用 UI =====
         function switchTab(e, tabName) {
@@ -679,7 +682,7 @@
             alert('比賽已開始！請切換到「技術記錄」頁面開始記錄。');
         }
 
-        function finishMatch() {
+        async function finishMatch() {
             if (!currentMatch) {
                 alert('目前沒有進行中的比賽。');
                 return;
@@ -696,8 +699,14 @@
 
             const snapshot = JSON.parse(JSON.stringify(currentMatch));
             snapshot.players = [...players];
+
+            // 放進本機的歷史
             matchHistory.push(snapshot);
 
+            // ★ 新增：同步到 Supabase
+            await saveMatchToSupabase(snapshot);
+
+            // 清空目前比賽
             currentMatch = null;
             players = [];
             currentViewSet = 'all';
@@ -710,7 +719,7 @@
             displayMatchHistory();
             updateCurrentMatchInfo();
 
-            alert('本場比賽已儲存到歷史紀錄！');
+            alert('本場比賽已儲存到歷史紀錄（含雲端）！');
         }
 
         // ===== 球員管理 =====
@@ -1229,6 +1238,87 @@
             container.innerHTML = html;
         }
 
+        // ===== Supabase 同步函式（新增） =====
+
+        // 把一場比賽存到 Supabase
+        async function saveMatchToSupabase(match) {
+            try {
+                const { error } = await supabase
+                    .from('volleyball_matches')
+                    .upsert({
+                        id: match.id,     // 你目前的 id: Date.now()
+                        data: match
+                    });
+
+                if (error) {
+                    console.error('儲存到 Supabase 失敗', error);
+                    alert('雲端儲存失敗，但本機已經有紀錄。');
+                } else {
+                    console.log('已儲存到 Supabase');
+                }
+            } catch (e) {
+                console.error('呼叫 Supabase 時發生錯誤', e);
+            }
+        }
+
+        // 從 Supabase 抓所有歷史比賽
+        async function loadMatchHistoryFromSupabase() {
+            try {
+                const { data, error } = await supabase
+                    .from('volleyball_matches')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('讀取 Supabase 歷史失敗', error);
+                    return;
+                }
+
+                // 把資料表中的 data(json) 取回來塞進目前的 matchHistory
+                matchHistory = (data || []).map(row => row.data);
+
+                // 也同步回 localStorage，離線時還能看
+                saveData();
+                displayMatchHistory();
+
+                console.log('已從 Supabase 載入歷史比賽');
+            } catch (e) {
+                console.error('呼叫 Supabase 時發生錯誤', e);
+            }
+        }
+
+        // 刪除一場比賽（給 deleteMatch 用）
+        async function deleteMatchFromSupabase(matchId) {
+            try {
+                const { error } = await supabase
+                    .from('volleyball_matches')
+                    .delete()
+                    .eq('id', matchId);
+
+                if (error) {
+                    console.error('刪除 Supabase 資料失敗', error);
+                }
+            } catch (e) {
+                console.error('呼叫 Supabase 刪除時錯誤', e);
+            }
+        }
+
+        // 清空所有比賽（給 clearHistory 用）
+        async function clearSupabaseHistory() {
+            try {
+                const { error } = await supabase
+                    .from('volleyball_matches')
+                    .delete()
+                    .neq('id', 0);   // 把所有 id != 0 的全部刪掉
+
+                if (error) {
+                    console.error('清除 Supabase 歷史失敗', error);
+                }
+            } catch (e) {
+                console.error('呼叫 Supabase 清除時錯誤', e);
+            }
+        }
+
         // 顯示歷史比賽統計彈窗
         function showHistoryStats(idx, viewSet) {
             const modal = document.getElementById('historyModal');
@@ -1362,17 +1452,30 @@
 
         function deleteMatch(idx) {
             if (!confirm('確定要刪除此比賽紀錄嗎？')) return;
+
+            const match = matchHistory[idx];
+            if (match && match.id) {
+                deleteMatchFromSupabase(match.id);  // 不等它回來，直接讓畫面先更新
+            }
+
             matchHistory.splice(idx, 1);
             saveData();
             displayMatchHistory();
         }
 
+
         function clearHistory() {
-            if (!confirm('確定要清除所有歷史紀錄嗎？此操作無法復原！')) return;
+    if (!confirm('確定要清除所有歷史紀錄嗎？此操作無法復原！')) return;
+
+            // 雲端也清空
+            clearSupabaseHistory();
+
             matchHistory = [];
             saveData();
             displayMatchHistory();
         }
+
+
     </script>
 </body>
 </html>
