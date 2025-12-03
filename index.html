@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>專業排球技術統計平台</title>
+    <title>排球技術統計平台</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         * {
@@ -48,6 +48,7 @@
             font-size: 16px;
             font-weight: bold;
             transition: all 0.3s;
+            color: #fff;
         }
 
         .tab-btn.active {
@@ -235,14 +236,49 @@
             .chart-container {
                 height: 300px;
             }
+            .skill-buttons {
+                grid-template-columns: 1fr;
+            }
         }
 
-        
+        /* 歷史統計彈出視窗 */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-card {
+            background: #fff;
+            border-radius: 12px;
+            max-width: 900px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .modal-close {
+            text-align: right;
+            margin-bottom: 10px;
+        }
+
+        .modal-close button {
+            background: #e74c3c;
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🏐 專業排球技術統計平台</h1>
+        <h1>🏐 排球技術統計平台</h1>
 
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab(event, 'match')">比賽設定</button>
@@ -308,6 +344,12 @@
 
         <!-- 技術記錄 -->
         <div id="tab-record" class="tab-content">
+            <!-- 目前比賽資訊顯示 -->
+            <div class="card">
+                <h2>目前比賽資訊</h2>
+                <div id="currentMatchInfo"></div>
+            </div>
+
             <div class="card">
                 <h2>選擇球員</h2>
                 <select id="recordPlayerSelect">
@@ -428,12 +470,26 @@
         </div>
     </div>
 
+    <!-- 歷史統計彈出視窗 -->
+    <div id="historyModal" class="modal-overlay" onclick="onHistoryModalBackgroundClick(event)">
+        <div class="modal-card">
+            <div class="modal-close">
+                <button onclick="closeHistoryModal()">關閉</button>
+            </div>
+            <div id="historyModalContent"></div>
+        </div>
+    </div>
+
     <script>
         // ===== 狀態變數 =====
         let currentMatch = null;     // 目前進行中的比賽
         let players = [];            // 目前比賽的球員清單（陣列）
         let matchHistory = [];       // 歷史比賽
         let currentViewSet = 'all';  // stats / analysis 目前顯示的局數
+
+        // 歷史視窗用
+        let currentHistoryIdx = null;
+        let currentHistoryViewSet = 'all';
 
         // 技術與結果對照
         const SKILL_LABELS = {
@@ -483,6 +539,14 @@
             updateSetFilterOptions();
             updateSetEventLog();
             updateAnalysis();
+            updateCurrentMatchInfo();
+
+            const setSelect = document.getElementById('currentSet');
+            if (setSelect) {
+                setSelect.addEventListener('change', () => {
+                    updateCurrentMatchInfo();
+                });
+            }
         };
 
         // ===== 共用 UI =====
@@ -542,6 +606,31 @@
             return stats;
         }
 
+        // 給歷史比賽用的 stats 計算
+        function computeStatsForMatch(match, viewSet = 'all') {
+            const stats = {};
+            if (!match || !match.sets) return stats;
+
+            const setKeys = viewSet === 'all'
+                ? Object.keys(match.sets || {})
+                : [viewSet];
+
+            setKeys.forEach(setKey => {
+                const events = match.sets[setKey] || [];
+                events.forEach(ev => {
+                    const { player, skill, result } = ev;
+                    if (!stats[player]) {
+                        stats[player] = createEmptyStats();
+                    }
+                    if (stats[player][skill]) {
+                        stats[player][skill][result]++;
+                    }
+                });
+            });
+
+            return stats;
+        }
+
         // ===== 比賽控制 =====
         function startMatch() {
             const date = document.getElementById('matchDate').value;
@@ -585,6 +674,7 @@
             updateSetFilterOptions();
             updateSetEventLog();
             updateAnalysis();
+            updateCurrentMatchInfo();
 
             alert('比賽已開始！請切換到「技術記錄」頁面開始記錄。');
         }
@@ -618,6 +708,7 @@
             updateSetEventLog();
             updateAnalysis();
             displayMatchHistory();
+            updateCurrentMatchInfo();
 
             alert('本場比賽已儲存到歷史紀錄！');
         }
@@ -702,6 +793,7 @@
             updatePlayerSelect();
             updatePlayerListTable();
             updateStatsTable();
+            updateCurrentMatchInfo();
         }
 
         function updatePlayerSelect() {
@@ -729,6 +821,27 @@
                 tdName.textContent = name;
                 tdOp.innerHTML = `<button class="delete-btn" onclick="deletePlayer('${name.replace(/'/g, "\\'")}')">刪除</button>`;
             });
+        }
+
+        // 目前比賽資訊（顯示在技術記錄頁）
+        function updateCurrentMatchInfo() {
+            const box = document.getElementById('currentMatchInfo');
+            if (!box) return;
+
+            if (!currentMatch) {
+                box.innerHTML = '<p style="color:#999;">尚未開始比賽，請先在「比賽設定」頁面開始新比賽。</p>';
+                return;
+            }
+
+            const setSelect = document.getElementById('currentSet');
+            const setValue = setSelect ? setSelect.value : '1';
+
+            box.innerHTML = `
+                <p><strong>日期：</strong>${currentMatch.date || '—'}</p>
+                <p><strong>地點：</strong>${currentMatch.location || '—'}</p>
+                <p><strong>對手：</strong>${currentMatch.opponent || '—'}</p>
+                <p style="margin-top:6px;"><strong>目前記錄局數：</strong>第 ${setValue} 局</p>
+            `;
         }
 
         // 局數下拉
@@ -1079,7 +1192,7 @@
             });
         }
 
-        // ===== 歷史紀錄 =====
+        // ===== 歷史紀錄列表 & 彈出統計 =====
         function displayMatchHistory() {
             const container = document.getElementById('matchHistory');
             if (!container) return;
@@ -1096,20 +1209,140 @@
                 html += `
                     <div class="match-item">
                         <strong>比賽 ${idx + 1}</strong><br>
-                        日期：${m.date}<br>
-                        地點：${m.location}<br>
-                        對手：${m.opponent}<br>
+                        日期：${m.date || '—'}<br>
+                        地點：${m.location || '—'}<br>
+                        對手：${m.opponent || '—'}<br>
                         局數：${setCount} 局<br>
-                        <div style="margin-top:8px;">
-                            <button class="btn-info" onclick="loadMatchFromHistory(${idx})"
-                                style="padding:6px 10px; font-size:12px;">載入這場比賽</button>
-                            <button class="delete-btn" onclick="deleteMatch(${idx})"
-                                style="margin-left:10px;">刪除</button>
+                        <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;">
+                            <button class="btn-primary"
+                                style="padding:6px 10px; font-size:12px;"
+                                onclick="showHistoryStats(${idx})">查看統計</button>
+                            <button class="btn-info"
+                                style="padding:6px 10px; font-size:12px;"
+                                onclick="loadMatchFromHistory(${idx})">載入這場比賽</button>
+                            <button class="delete-btn"
+                                onclick="deleteMatch(${idx})">刪除</button>
                         </div>
                     </div>`;
             });
 
             container.innerHTML = html;
+        }
+
+        // 顯示歷史比賽統計彈窗
+        function showHistoryStats(idx, viewSet) {
+            const modal = document.getElementById('historyModal');
+            const content = document.getElementById('historyModalContent');
+            const match = matchHistory[idx];
+            if (!modal || !content || !match) return;
+
+            currentHistoryIdx = idx;
+            currentHistoryViewSet = viewSet || currentHistoryViewSet || 'all';
+
+            const sets = match.sets || {};
+            const setKeys = Object.keys(sets).sort((a,b) => Number(a) - Number(b));
+
+            let setOptions = `<option value="all"${currentHistoryViewSet === 'all' ? ' selected' : ''}>全部局數</option>`;
+            setKeys.forEach(k => {
+                const selected = String(currentHistoryViewSet) === String(k) ? ' selected' : '';
+                setOptions += `<option value="${k}"${selected}>第 ${k} 局</option>`;
+            });
+
+            const stats = computeStatsForMatch(match, currentHistoryViewSet);
+            const names = Object.keys(stats);
+
+            let tableHtml = '';
+            if (!names.length) {
+                tableHtml = '<p style="color:#999; margin-top:10px;">尚無紀錄</p>';
+            } else {
+                tableHtml += `
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+                            <thead>
+                                <tr>
+                                    <th>球員</th>
+                                    <th>發球</th>
+                                    <th>接發</th>
+                                    <th>攻擊</th>
+                                    <th>攔網</th>
+                                    <th>舉球</th>
+                                    <th>防守</th>
+                                    <th>總得分</th>
+                                    <th>總失誤</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+                names.forEach(name => {
+                    const s = stats[name];
+                    const totalScore =
+                        s.serve.score + s.receive.score + s.attack.score +
+                        s.block.score + s.set.score + s.defense.score;
+                    const totalError =
+                        s.serve.error + s.receive.error + s.attack.error +
+                        s.block.error + s.set.error + s.defense.error;
+
+                    tableHtml += `
+                        <tr>
+                            <td>${name}</td>
+                            <td>${s.serve.score}/${s.serve.error}</td>
+                            <td>${s.receive.score}/${s.receive.error}</td>
+                            <td>${s.attack.score}/${s.attack.error}</td>
+                            <td>${s.block.score}/${s.block.error}</td>
+                            <td>${s.set.score}/${s.set.error}</td>
+                            <td>${s.defense.score}/${s.defense.error}</td>
+                            <td style="color:#11998e; font-weight:bold;">${totalScore}</td>
+                            <td style="color:#eb3349; font-weight:bold;">${totalError}</td>
+                        </tr>`;
+                });
+
+                tableHtml += `
+                            </tbody>
+                        </table>
+                    </div>`;
+            }
+
+            const scopeText =
+                currentHistoryViewSet === 'all'
+                    ? '全部局數'
+                    : `第 ${currentHistoryViewSet} 局`;
+
+            content.innerHTML = `
+                <h2 style="color:#667eea; margin-bottom:10px;">歷史比賽統計</h2>
+                <p><strong>日期：</strong>${match.date || '—'}</p>
+                <p><strong>地點：</strong>${match.location || '—'}</p>
+                <p><strong>對手：</strong>${match.opponent || '—'}</p>
+                <p style="margin-top:6px;"><strong>目前顯示：</strong>${scopeText}</p>
+                <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                    <label for="historySetSelect" style="font-weight:bold;">顯示局數：</label>
+                    <select id="historySetSelect" onchange="onHistorySetChange()">
+                        ${setOptions}
+                    </select>
+                </div>
+                ${tableHtml}
+            `;
+
+            modal.style.display = 'flex';
+        }
+
+        function onHistorySetChange() {
+            const sel = document.getElementById('historySetSelect');
+            if (!sel) return;
+            currentHistoryViewSet = sel.value || 'all';
+            if (currentHistoryIdx !== null) {
+                showHistoryStats(currentHistoryIdx, currentHistoryViewSet);
+            }
+        }
+
+        function closeHistoryModal() {
+            const modal = document.getElementById('historyModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function onHistoryModalBackgroundClick(e) {
+            if (e.target && e.target.id === 'historyModal') {
+                closeHistoryModal();
+            }
         }
 
         function loadMatchFromHistory(idx) {
