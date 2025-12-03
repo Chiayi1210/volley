@@ -551,30 +551,34 @@
 
     // ===== 載入 / 儲存 =====
     function loadData() {
-        const saved = localStorage.getItem('volleyballStatsV2');
-        if (saved) {
-            try {
-                const data = JSON.parse(saved);
-                currentMatch   = data.currentMatch || null;
-                players        = data.players || [];
-                matchHistory   = data.matchHistory || [];
-                currentViewSet = data.currentViewSet || 'all';
-            } catch (e) {
-                console.error('讀取 localStorage 失敗，清除舊資料', e);
-                localStorage.removeItem('volleyballStatsV2');
-            }
+    const saved = localStorage.getItem('volleyballStatsV2');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            currentMatch   = data.currentMatch || null;
+            players        = data.players || [];
+            // ❌ 不再從 localStorage 拿歷史資料
+            // matchHistory   = data.matchHistory || [];
+            currentViewSet = data.currentViewSet || 'all';
+        } catch (e) {
+            console.error('讀取 localStorage 失敗，清除舊資料', e);
+            localStorage.removeItem('volleyballStatsV2');
         }
     }
+}
+
 
     function saveData() {
-        const data = {
-            currentMatch,
-            players,
-            matchHistory,
-            currentViewSet
-        };
-        localStorage.setItem('volleyballStatsV2', JSON.stringify(data));
-    }
+    const data = {
+        currentMatch,
+        players,
+        // ❌ 不把歷史紀錄存到 localStorage
+        // matchHistory,
+        currentViewSet
+    };
+    localStorage.setItem('volleyballStatsV2', JSON.stringify(data));
+}
+
 
     window.onload = function() {
         loadData();  // 保留舊的本機資料（離線用）
@@ -720,21 +724,27 @@
 
         // 若已有進行中的比賽
         if (currentMatch) {
-            const hasEvents = currentMatch.sets &&
-                Object.values(currentMatch.sets).some(arr => arr && arr.length > 0);
+    const hasEvents = currentMatch.sets &&
+        Object.values(currentMatch.sets).some(arr => arr && arr.length > 0);
 
-            if (hasEvents) {
-                const ok = confirm('目前有一場尚未結束的比賽，開始新比賽前要先把舊比賽存入歷史紀錄嗎？');
-                if (ok) {
-                    const snapshot = JSON.parse(JSON.stringify(currentMatch));
-                    snapshot.players = [...players];
-                    matchHistory.push(snapshot);
-                } else {
-                    showMatchFeedback('已取消開始新比賽。');
-                    return;
-                }
-            }
+    if (hasEvents) {
+        const ok = confirm('目前有一場尚未結束的比賽，開始新比賽前要先把舊比賽存入歷史紀錄嗎？');
+        if (ok) {
+            const snapshot = JSON.parse(JSON.stringify(currentMatch));
+            snapshot.players = [...players];
+
+            // 放進前端的歷史陣列（方便畫面立刻更新）
+            matchHistory.unshift(snapshot);
+            displayMatchHistory();
+
+            // 丟到 Supabase（不用 await，失敗時在函式裡會 console.error）
+            saveMatchToSupabase(snapshot);
+        } else {
+            showMatchFeedback('已取消開始新比賽。');
+            return;
         }
+    }
+}
 
         // 開新比賽（清空球員與局數）
         currentMatch = {
@@ -1549,7 +1559,7 @@
 
             matchHistory = (data || []).map(row => row.data);
 
-            saveData();
+        
             displayMatchHistory();
 
             console.log('已從 Supabase 載入歷史比賽');
