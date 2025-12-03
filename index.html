@@ -506,6 +506,24 @@
     </div>
 </div>
 
+<!-- 結束比賽：輸入各局比分的彈出視窗 -->
+<div id="finishMatchModal" class="modal-overlay" onclick="onFinishModalBackgroundClick(event)">
+    <div class="modal-card">
+        <div class="modal-close">
+            <button onclick="closeFinishMatchModal()">關閉</button>
+        </div>
+        <h2 style="color:#667eea; margin-bottom:10px;">輸入各局最終比分</h2>
+        <p style="margin-bottom:10px;">請填寫本場比賽各局的「我方得分」與「對手得分」，再按「確認儲存並結束比賽」。</p>
+        <div id="finishMatchSetsContainer"></div>
+
+        <div style="margin-top:15px; text-align:right;">
+            <button class="btn-warning" style="margin-right:8px;" onclick="closeFinishMatchModal()">取消</button>
+            <button class="btn-primary" onclick="confirmFinishMatch()">✅ 確認儲存並結束比賽</button>
+        </div>
+    </div>
+</div>
+
+
 <script>
     // ===== 狀態變數 =====
     let currentMatch = null;     // 目前進行中的比賽
@@ -725,7 +743,9 @@
             location,
             opponent,
             startTime: new Date().toISOString(),
-            sets: {} // { "1": [ events... ], "2": [...] }
+            sets: {},        // 各局事件
+            setScores: {},   // 之後會放各局比分
+            finalSets: null  // 之後會放整場「幾比幾」
         };
         players = [];
         currentViewSet = 'all';
@@ -737,51 +757,184 @@
         updateAnalysis();
         updateCurrentMatchInfo();
 
-        alert('比賽已開始！請切換到「技術記錄」頁面開始記錄。');
+        alert(`✅ 已新增一場比賽！\n\n日期：${date}\n地點：${location}\n對手：${opponent}\n\n請切換到「技術記錄」頁面開始記錄。`);
         showMatchFeedback(`✅ 已開始新比賽：${date} @ ${location} 對戰 ${opponent}`);
     }
 
-    async function finishMatch() {
+    // 點「結束本場比賽並存入歷史」時先跳出輸入比分視窗
+    function finishMatch() {
         if (!currentMatch) {
             alert('目前沒有進行中的比賽。');
             showMatchFeedback('⚠️ 沒有進行中的比賽可以結束。');
             return;
         }
+        openFinishMatchModal();
+    }
 
-        const hasEvents = currentMatch.sets &&
-            Object.values(currentMatch.sets).some(arr => arr && arr.length > 0);
+    // 建立各局比分輸入欄位並打開 modal
+    function openFinishMatchModal() {
+        const modal = document.getElementById('finishMatchModal');
+        const container = document.getElementById('finishMatchSetsContainer');
+        if (!modal || !container) return;
 
-        if (!hasEvents) {
-            if (!confirm('這場比賽還沒有任何紀錄，仍要結束並存入歷史嗎？')) {
-                showMatchFeedback('已取消結束比賽。');
-                return;
-            }
+        container.innerHTML = '';
+
+        // 已有紀錄的局數
+        const existingSetKeys = currentMatch.sets
+            ? Object.keys(currentMatch.sets).map(k => parseInt(k, 10)).filter(n => !isNaN(n))
+            : [];
+
+        const setSelect = document.getElementById('currentSet');
+        const currentSetVal = setSelect ? parseInt(setSelect.value || '1', 10) : 1;
+
+        let maxSet = existingSetKeys.length ? Math.max(...existingSetKeys) : 1;
+        if (currentSetVal > maxSet) maxSet = currentSetVal;
+        if (!maxSet || maxSet < 1) maxSet = 1;
+
+        const setScores = currentMatch.setScores || {};
+
+        for (let i = 1; i <= maxSet; i++) {
+            const old = setScores[i] || {};
+            const ourVal  = (old.our  != null) ? old.our  : '';
+            const oppVal  = (old.opp  != null) ? old.opp  : '';
+
+            const row = document.createElement('div');
+            row.style.marginBottom = '10px';
+            row.innerHTML = `
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                    <strong style="min-width:70px;">第 ${i} 局</strong>
+                    <label>我方得分：
+                        <input type="number" id="finishSet-${i}-our" min="0" style="width:80px; padding:4px 6px;" value="${ourVal}">
+                    </label>
+                    <label>對手得分：
+                        <input type="number" id="finishSet-${i}-opp" min="0" style="width:80px; padding:4px 6px;" value="${oppVal}">
+                    </label>
+                    <small style="color:#999;">（可留白表示該局未進行）</small>
+                </div>
+            `;
+            container.appendChild(row);
         }
 
+        modal.style.display = 'flex';
+    }
+
+    // 點 modal 裡「確認儲存並結束比賽」
+    async function confirmFinishMatch() {
+        if (!currentMatch) {
+            closeFinishMatchModal();
+            return;
+        }
+
+        const setScores = {};
+        let ourWins = 0;
+        let oppWins = 0;
+
+        const existingSetKeys = currentMatch.sets
+            ? Object.keys(currentMatch.sets).map(k => parseInt(k, 10)).filter(n => !isNaN(n))
+            : [];
+
+        const setSelect = document.getElementById('currentSet');
+        const currentSetVal = setSelect ? parseInt(setSelect.value || '1', 10) : 1;
+
+        let maxSet = existingSetKeys.length ? Math.max(...existingSetKeys) : 1;
+        if (currentSetVal > maxSet) maxSet = currentSetVal;
+        if (!maxSet || maxSet < 1) maxSet = 1;
+
+        // 逐局讀取輸入值
+        for (let i = 1; i <= maxSet; i++) {
+            const ourInput = document.getElementById(`finishSet-${i}-our`);
+            const oppInput = document.getElementById(`finishSet-${i}-opp`);
+            if (!ourInput || !oppInput) continue;
+
+            const ourRaw = ourInput.value.trim();
+            const oppRaw = oppInput.value.trim();
+
+            // 兩個都空 → 視為該局沒打
+            if (ourRaw === '' && oppRaw === '') {
+                continue;
+            }
+
+            // 只填一邊 → 視為錯誤
+            if (ourRaw === '' || oppRaw === '') {
+                alert(`第 ${i} 局的比分請「兩邊都填」，或「兩邊都留白」。`);
+                return;
+            }
+
+            const our = parseInt(ourRaw, 10);
+            const opp = parseInt(oppRaw, 10);
+
+            if (isNaN(our) || isNaN(opp) || our < 0 || opp < 0) {
+                alert(`第 ${i} 局的比分必須是大於等於 0 的整數。`);
+                return;
+            }
+
+            setScores[i] = { our, opp };
+            if (our > opp) ourWins++;
+            else if (opp > our) oppWins++;
+        }
+
+        // 把比分寫回 currentMatch
+        currentMatch.setScores = setScores;
+        currentMatch.finalSets = { our: ourWins, opp: oppWins };
+
+        // 呼叫真正的「結束比賽 + 存檔」流程
+        await reallyFinishMatch();
+
+        closeFinishMatchModal();
+    }
+
+    // 真正結束比賽並處理收尾
+    async function reallyFinishMatch() {
+        if (!currentMatch) return;
+
+        // 補上結束時間 & 球員名單
+        currentMatch.endTime = new Date().toISOString();
+        currentMatch.players = Array.isArray(players) ? [...players] : [];
+
+        // 做一份乾淨快照，避免之後被修改
         const snapshot = JSON.parse(JSON.stringify(currentMatch));
-        snapshot.players = [...players];
 
-        // 放進本機的歷史
-        matchHistory.push(snapshot);
+        // 放進本機歷史紀錄（最新一場放最上面）
+        matchHistory.unshift(snapshot);
 
-        // 同步到 Supabase
+        // 儲存到 localStorage
+        saveData();
+
+        // 更新歷史列表畫面
+        displayMatchHistory();
+
+        // 同步到 Supabase（雲端）
         await saveMatchToSupabase(snapshot);
 
-        // 清空目前比賽
+        // 顯示小提醒（如果有輸入 finalSets 就顯示幾比幾）
+        let finalText = '';
+        if (snapshot.finalSets && snapshot.finalSets.our != null && snapshot.finalSets.opp != null) {
+            finalText = ` 最終局數：${snapshot.finalSets.our} 比 ${snapshot.finalSets.opp}`;
+        }
+        showMatchFeedback(`✅ 本場比賽已結束並存入歷史！${finalText}`);
+
+        // 清空目前比賽與球員，回到初始狀態
         currentMatch = null;
         players = [];
         currentViewSet = 'all';
 
-        saveData();
         updateAllDisplays();
         updateSetFilterOptions();
         updateSetEventLog();
         updateAnalysis();
-        displayMatchHistory();
         updateCurrentMatchInfo();
+        saveData();
+    }
 
-        alert('本場比賽已儲存到歷史紀錄（含雲端）！');
-        showMatchFeedback('✅ 本場比賽已結束並儲存。');
+    function closeFinishMatchModal() {
+        const modal = document.getElementById('finishMatchModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function onFinishModalBackgroundClick(e) {
+        if (e.target && e.target.id === 'finishMatchModal') {
+            closeFinishMatchModal();
+        }
     }
 
     // ===== 球員管理 =====
@@ -1130,10 +1283,16 @@
 
     // ===== 數據分析 =====
     function updateAnalysis() {
+        const mvpBox = document.getElementById('mvpDisplay');
+        const rankingBox = document.getElementById('rankingDisplay');
+
         if (!currentMatch) {
-            document.getElementById('mvpDisplay').innerHTML =
-                '<div class="card">尚未開始比賽</div>';
-            document.getElementById('rankingDisplay').innerHTML = '';
+            if (mvpBox) {
+                mvpBox.innerHTML = '<div class="card">尚未開始比賽</div>';
+            }
+            if (rankingBox) {
+                rankingBox.innerHTML = '';
+            }
             if (window.skillChart) window.skillChart.destroy();
             if (window.rateChart) window.rateChart.destroy();
             return;
@@ -1166,6 +1325,8 @@
         });
 
         const box = document.getElementById('mvpDisplay');
+        if (!box) return;
+
         if (!mvp || bestScore <= -Infinity) {
             box.innerHTML = '<div class="card">尚無數據</div>';
             return;
@@ -1187,6 +1348,7 @@
 
     function displayRankings(stats) {
         const container = document.getElementById('rankingDisplay');
+        if (!container) return;
         const skills = ['serve', 'receive', 'attack', 'block', 'set', 'defense'];
         let html = '';
 
@@ -1233,13 +1395,14 @@
 
     function drawSkillChart(stats) {
         const ctx = document.getElementById('skillChart');
+        if (!ctx) return;
         if (window.skillChart) window.skillChart.destroy();
 
         const names = Object.keys(stats);
         if (names.length === 0) return;
 
         const skillKeys = ['serve', 'receive', 'attack', 'block', 'set', 'defense'];
-        const colors = ['#FF63884', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
 
         const datasets = skillKeys.map((sk, idx) => ({
             label: SKILL_LABELS[sk],
@@ -1265,6 +1428,7 @@
 
     function drawRateChart(stats) {
         const ctx = document.getElementById('rateChart');
+        if (!ctx) return;
         if (window.rateChart) window.rateChart.destroy();
 
         const names = Object.keys(stats);
@@ -1322,6 +1486,10 @@
         let html = '';
         matchHistory.forEach((m, idx) => {
             const setCount = m.sets ? Object.keys(m.sets).length : 0;
+            let finalText = '';
+            if (m.finalSets && m.finalSets.our != null && m.finalSets.opp != null) {
+                finalText = `最終局數：${m.finalSets.our} 比 ${m.finalSets.opp}<br>`;
+            }
             html += `
                 <div class="match-item">
                     <strong>比賽 ${idx + 1}</strong><br>
@@ -1329,6 +1497,7 @@
                     地點：${m.location || '—'}<br>
                     對手：${m.opponent || '—'}<br>
                     局數：${setCount} 局<br>
+                    ${finalText}
                     <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;">
                         <button class="btn-primary"
                             style="padding:6px 10px; font-size:12px;"
