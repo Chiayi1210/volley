@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>排球技術統計平台</title>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+   
     <style>
         * {
             margin: 0;
@@ -767,7 +770,7 @@
         updateAnalysis();
         updateCurrentMatchInfo();
 
-        alert(`✅ 已新增一場比賽！\n\n日期：${date}\n地點：${location}\n對手：${opponent}\n\n請切換到「技術記錄」頁面開始記錄。`);
+        alert(`✅ 已新增一場比賽！\n\n日期：${date}\n地點：${location}\n對手：${opponent}\n\n請先新增球員後切換到「技術記錄」頁面直接開始記錄。`);
         showMatchFeedback(`✅ 已開始新比賽：${date} @ ${location} 對戰 ${opponent}`);
     }
 
@@ -986,49 +989,62 @@
 
     // ===== 記錄動作 & 撤銷 =====
     function recordAction(skill, result) {
-        const playerName = document.getElementById('recordPlayerSelect').value;
-        const setSelect = document.getElementById('currentSet');
-        const currentSet = setSelect ? (setSelect.value || '1') : '1';
+    const playerName = document.getElementById('recordPlayerSelect').value;
+    const setSelect = document.getElementById('currentSet');
+    const currentSet = setSelect ? (setSelect.value || '1') : '1';
 
-        if (!playerName) {
-            alert('請先選擇球員！');
-            showActionFeedback('⚠️ 尚未選擇球員，無法記錄技術動作。');
-            return;
-        }
-
-        if (!currentMatch) {
-            alert('請先在「比賽設定」頁面開始新比賽！');
-            showActionFeedback('⚠️ 尚未開始比賽，請先到「比賽設定」開始比賽。');
-            return;
-        }
-
-        if (!players.includes(playerName)) {
-            players.push(playerName);
-        }
-
-        if (!currentMatch.sets[currentSet]) {
-            currentMatch.sets[currentSet] = [];
-        }
-
-        const event = {
-            player: playerName,
-            skill,
-            result,
-            time: new Date().toISOString()
-        };
-
-        currentMatch.sets[currentSet].push(event);
-
-        saveData();
-        updateAllDisplays();
-        updateSetFilterOptions();
-        updateSetEventLog();
-        updateAnalysis();
-
-        const skillText  = SKILL_LABELS[skill]  || skill;
-        const resultText = RESULT_LABELS[result] || result;
-        showActionFeedback(`✅ 已記錄：第 ${currentSet} 局　${playerName}　${skillText}（${resultText}）`);
+    if (!playerName) {
+        alert('請先選擇球員！');
+        showActionFeedback('⚠️ 尚未選擇球員，無法記錄技術動作。');
+        return;
     }
+
+    if (!currentMatch) {
+        alert('請先在「比賽設定」頁面開始新比賽！');
+        showActionFeedback('⚠️ 尚未開始比賽，請先到「比賽設定」開始比賽。');
+        return;
+    }
+
+    if (!players.includes(playerName)) {
+        players.push(playerName);
+    }
+
+    if (!currentMatch.sets[currentSet]) {
+        currentMatch.sets[currentSet] = [];
+    }
+
+    // 👉 新增：按下按鈕先跳出確認視窗
+    const skillText  = SKILL_LABELS[skill]   || skill;
+    const resultText = RESULT_LABELS[result] || result;
+    const ok = confirm(
+        `確認要記錄這筆技術動作嗎？\n\n` +
+        `球員：${playerName}\n` +
+        `局數：第 ${currentSet} 局\n` +
+        `動作：${skillText}（${resultText}）`
+    );
+    if (!ok) {
+        showActionFeedback('已取消本次紀錄。');
+        return;
+    }
+
+    const event = {
+        player: playerName,
+        skill,
+        result,
+        time: new Date().toISOString()
+    };
+
+    currentMatch.sets[currentSet].push(event);
+
+    saveData();
+    updateAllDisplays();
+    updateSetFilterOptions();
+    updateSetEventLog();
+    updateAnalysis();
+
+    showActionFeedback(`✅ 已記錄：第 ${currentSet} 局　${playerName}　${skillText}（${resultText}）`);
+}
+
 
     function undoLastAction() {
         if (!currentMatch || !currentMatch.sets) {
@@ -1168,6 +1184,7 @@
                 ? '全部局數'
                 : `第 ${currentViewSet} 局`;
     }
+
 
     // 統計表 + 成功率
     function updateStatsTable() {
@@ -1482,6 +1499,24 @@
         });
     }
 
+    // 把 setScores 轉成「第1局 25-18，第2局 23-25」這種字串
+    function buildSetScoresText(setScores) {
+        if (!setScores) return '—';
+        const keys = Object.keys(setScores).sort((a, b) => Number(a) - Number(b));
+        if (!keys.length) return '—';
+
+        return keys
+            .map(k => {
+                const s = setScores[k] || {};
+                if (s.our == null || s.opp == null) return '';
+                return `第${k}局 ${s.our}-${s.opp}`;
+            })
+            .filter(Boolean)
+            .join('，');
+    }
+
+
+
     // ===== 歷史紀錄列表 & 彈出統計 =====
     function displayMatchHistory() {
         const container = document.getElementById('matchHistory');
@@ -1495,32 +1530,36 @@
 
         let html = '';
         matchHistory.forEach((m, idx) => {
-            const setCount = m.sets ? Object.keys(m.sets).length : 0;
-            let finalText = '';
-            if (m.finalSets && m.finalSets.our != null && m.finalSets.opp != null) {
-                finalText = `最終局數：${m.finalSets.our} 比 ${m.finalSets.opp}<br>`;
-            }
-            html += `
-                <div class="match-item">
-                    <strong>比賽 ${idx + 1}</strong><br>
-                    日期：${m.date || '—'}<br>
-                    地點：${m.location || '—'}<br>
-                    對手：${m.opponent || '—'}<br>
-                    局數：${setCount} 局<br>
-                    ${finalText}
-                    <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;">
-                        <button class="btn-primary"
-                            style="padding:6px 10px; font-size:12px;"
-                            onclick="showHistoryStats(${idx})">查看統計</button>
-                        <button class="btn-info"
-                            style="padding:6px 10px; font-size:12px;"
-                            onclick="loadMatchFromHistory(${idx})">載入這場比賽</button>
-                        <button class="delete-btn"
-                            onclick="deleteMatch(${idx})">刪除</button>
-                    </div>
-                </div>`;
-        });
-
+        const setCount = m.sets ? Object.keys(m.sets).length : 0;
+        const setScoresText = buildSetScoresText(m.setScores);
+        let finalText = '';
+        if (m.finalSets && m.finalSets.our != null && m.finalSets.opp != null) {
+            finalText = `最終局數：${m.finalSets.our} 比 ${m.finalSets.opp}<br>`;
+        }
+        html += `
+            <div class="match-item">
+                <strong>比賽 ${idx + 1}</strong><br>
+                日期：${m.date || '—'}<br>
+                地點：${m.location || '—'}<br>
+                對手：${m.opponent || '—'}<br>
+                局數：${setCount} 局<br>
+                各局比分：${setScoresText || '—'}<br>
+                ${finalText}
+                <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;">
+                    <button class="btn-primary"
+                        style="padding:6px 10px; font-size:12px;"
+                        onclick="showHistoryStats(${idx})">查看統計</button>
+                    <button class="btn-info"
+                        style="padding:6px 10px; font-size:12px;"
+                        onclick="loadMatchFromHistory(${idx})">載入這場比賽</button>
+                    <button class="btn-success"
+                        style="padding:6px 10px; font-size:12px;"
+                        onclick="())">下載PDF</button>
+                    <button class="delete-btn"
+                        onclick="deleteMatch(${idx})">刪除</button>
+                </div>
+            </div>`;
+    });
         container.innerHTML = html;
     }
 
@@ -1732,6 +1771,128 @@
         alert('已載入歷史比賽，現在顯示的是該場數據。');
     }
 
+    // ===== 下載單場比賽 PDF（比賽資訊 + 全部紀錄） =====
+async function downloadMatchPDF(idx) {
+    const match = matchHistory[idx];
+    if (!match) {
+        alert('找不到這場比賽紀錄。');
+        return;
+    }
+
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        alert('PDF 套件尚未載入，請稍後再試一次。');
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+
+    // 1. 把要印的內容組成 HTML，塞到隱藏 div 裡
+    const container = document.getElementById('pdfReport');
+    const setCount = match.sets ? Object.keys(match.sets).length : 0;
+    const setScoresText = buildSetScoresText(match.setScores);
+
+    let html = `
+        <h2 style="text-align:center; margin-bottom:10px;">排球技術統計紀錄</h2>
+        <p><strong>比賽日期：</strong>${match.date || '—'}</p>
+        <p><strong>比賽地點：</strong>${match.location || '—'}</p>
+        <p><strong>對手隊伍：</strong>${match.opponent || '—'}</p>
+        <p><strong>總局數：</strong>${setCount} 局</p>
+        <p><strong>各局比分：</strong>${setScoresText || '—'}</p>
+    `;
+
+    if (match.finalSets && match.finalSets.our != null && match.finalSets.opp != null) {
+        html += `<p><strong>最終局數：</strong>${match.finalSets.our} 比 ${match.finalSets.opp}</p>`;
+    }
+
+    if (match.players && match.players.length) {
+        html += `<p><strong>球員清單：</strong>${match.players.join('、')}</p>`;
+    }
+
+    html += `<hr style="margin:10px 0;">`;
+    html += `<h3>球員技術統計（全部局數）</h3>`;
+
+    const stats = computeStatsForMatch(match, 'all');
+    const names = Object.keys(stats);
+
+    if (!names.length) {
+        html += `<p>目前尚無技術統計紀錄。</p>`;
+    } else {
+        html += `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead>
+                <tr>
+                    <th style="border:1px solid #ccc; padding:4px;">球員</th>
+                    <th style="border:1px solid #ccc; padding:4px;">發球</th>
+                    <th style="border:1px solid #ccc; padding:4px;">接發</th>
+                    <th style="border:1px solid #ccc; padding:4px;">攻擊</th>
+                    <th style="border:1px solid #ccc; padding:4px;">攔網</th>
+                    <th style="border:1px solid #ccc; padding:4px;">舉球</th>
+                    <th style="border:1px solid #ccc; padding:4px;">防守</th>
+                    <th style="border:1px solid #ccc; padding:4px;">總得分</th>
+                    <th style="border:1px solid #ccc; padding:4px;">總失誤</th>
+                </tr>
+            </thead>
+            <tbody>
+        `;
+
+        names.forEach(name => {
+            const s = stats[name];
+            const totalScore =
+                s.serve.score + s.receive.score + s.attack.score +
+                s.block.score + s.set.score + s.defense.score;
+            const totalError =
+                s.serve.error + s.receive.error + s.attack.error +
+                s.block.error + s.set.error + s.defense.error;
+
+            html += `
+                <tr>
+                    <td style="border:1px solid #ccc; padding:4px;">${name}</td>
+                    <td style="border:1px solid #ccc; padding:4px;">${s.serve.score}/${s.serve.error}</td>
+                    <td style="border:1px solid #ccc; padding:4px;">${s.receive.score}/${s.receive.error}</td>
+                    <td style="border:1px solid #ccc; padding:4px;">${s.attack.score}/${s.attack.error}</td>
+                    <td style="border:1px solid #ccc; padding:4px;">${s.block.score}/${s.block.error}</td>
+                    <td style="border:1px solid #ccc; padding:4px;">${s.set.score}/${s.set.error}</td>
+                    <td style="border:1px solid #ccc; padding:4px;">${s.defense.score}/${s.defense.error}</td>
+                    <td style="border:1px solid #ccc; padding:4px;">${totalScore}</td>
+                    <td style="border:1px solid #ccc; padding:4px;">${totalError}</td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table>`;
+    }
+
+    container.innerHTML = html;
+
+    const oldDisplay = container.style.display;
+    const oldPosition = container.style.position;
+    const oldLeft = container.style.left;
+    container.style.display = 'block';
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+
+    const fileDate = match.date || '';
+    const safeDate = fileDate.replace(/[^0-9\-]/g, '');
+    const fileName = `volleyball_match_${safeDate || match.id}.pdf`;
+
+    doc.html(container, {
+        callback: function (doc) {
+            doc.save(fileName);
+
+            // 還原原本的樣式
+            container.style.display = oldDisplay;
+            container.style.position = oldPosition;
+            container.style.left = oldLeft;
+        },
+        margin: [40, 40, 40, 40],
+        autoPaging: 'text'
+        
+    });
+}
+    
+
+
+
     function deleteMatch(idx) {
         if (!confirm('確定要刪除此比賽紀錄嗎？')) return;
 
@@ -1763,5 +1924,14 @@
     const supabaseKey = 'sb_publishable_bH3G1mBpFakJjyUS5KaPWA_jHNBTLub'; // 替換成你的 anon key
     const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 </script>
+
+<!-- 放在 body 裡任何地方都可以，建議靠近底部，避免干擾畫面 -->
+<div id="pdfReport"
+     style="position:absolute; left:-9999px; top:0; visibility:hidden; padding:20px; font-family:'Microsoft JhengHei', Arial, sans-serif;">
+</div>
+
+
+
 </body>
+
 </html>
