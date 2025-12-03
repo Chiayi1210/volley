@@ -296,7 +296,7 @@
         <button class="tab-btn active" onclick="switchTab(event, 'match')">比賽設定</button>
         <button class="tab-btn" onclick="switchTab(event, 'record')">技術記錄</button>
         <button class="tab-btn" onclick="switchTab(event, 'stats')">數據統計</button>
-        <button class="tab-btn" onclick="switchTab(event, 'analysis')">數據分析</button>
+       <!-- <button class="tab-btn" onclick="switchTab(event, 'analysis')">數據分析</button>-->
         <button class="tab-btn" onclick="switchTab(event, 'history')">歷史紀錄</button>
     </div>
 
@@ -452,7 +452,7 @@
         </div>
     </div>
 
-    <!-- 數據分析 -->
+    <!-- 數據分析 
     <div id="tab-analysis" class="tab-content">
         <div class="card">
             <h2>分析設定</h2>
@@ -482,7 +482,7 @@
                 <canvas id="rateChart"></canvas>
             </div>
         </div>
-    </div>
+    </div>-->
 
     <!-- 歷史紀錄 -->
     <div id="tab-history" class="tab-content">
@@ -1526,47 +1526,49 @@
 
     // ===== Supabase 同步函式 =====
     async function saveMatchToSupabase(match) {
-        try {
-            const { error } = await supabase
-                .from('volleyball_matches')
-                .upsert({
-                    id: match.id,
-                    data: match
-                });
+    try {
+        const { data, error } = await supabase
+            .from('volleyball_matches')
+            .upsert({
+                id: match.id,
+                data: match
+            })
+            .select();  // 看看 Supabase 回了什麼
 
-            if (error) {
-                console.error('儲存到 Supabase 失敗', error);
-                alert('雲端儲存失敗，但本機已經有紀錄。');
-            } else {
-                console.log('已儲存到 Supabase');
-            }
-        } catch (e) {
-            console.error('呼叫 Supabase 時發生錯誤', e);
+        if (error) {
+            console.error('儲存到 Supabase 失敗', error);
+            alert('Supabase 儲存失敗：' + error.message);
+        } else {
+            console.log('已儲存到 Supabase', data);
         }
+    } catch (e) {
+        console.error('呼叫 Supabase 時發生錯誤', e);
+        alert('Supabase 呼叫失敗：' + e.message);
     }
+}
+
 
     async function loadMatchHistoryFromSupabase() {
-        try {
-            const { data, error } = await supabase
-                .from('volleyball_matches')
-                .select('*')
-                .order('created_at', { ascending: false });
+    try {
+        const { data, error } = await supabase
+            .from('volleyball_matches')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-            if (error) {
-                console.error('讀取 Supabase 歷史失敗', error);
-                return;
-            }
-
-            matchHistory = (data || []).map(row => row.data);
-
-        
-            displayMatchHistory();
-
-            console.log('已從 Supabase 載入歷史比賽');
-        } catch (e) {
-            console.error('呼叫 Supabase 時發生錯誤', e);
+        if (error) {
+            console.error('讀取 Supabase 歷史失敗', error);
+            alert('Supabase 讀取失敗：' + error.message);
+            return;
         }
+
+        matchHistory = (data || []).map(row => row.data);
+        displayMatchHistory();
+        console.log('已從 Supabase 載入歷史比賽', data);
+    } catch (e) {
+        console.error('呼叫 Supabase 時發生錯誤', e);
+        alert('Supabase 呼叫失敗：' + e.message);
     }
+}
 
     async function deleteMatchFromSupabase(matchId) {
         try {
@@ -1762,4 +1764,6 @@
     const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 </script>
 </body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.48.0/dist/umd/supabase.min.js"></script>
+
 </html>
